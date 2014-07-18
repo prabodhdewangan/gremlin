@@ -1,9 +1,12 @@
 package com.tinkerpop.gremlin.groovy.jsr223;
 
 import com.tinkerpop.blueprints.Graph;
+import com.tinkerpop.blueprints.Index;
 import com.tinkerpop.blueprints.Vertex;
 import com.tinkerpop.blueprints.impls.tg.TinkerGraph;
 import com.tinkerpop.blueprints.impls.tg.TinkerGraphFactory;
+import com.tinkerpop.pipes.Pipe;
+
 import junit.framework.Assert;
 import junit.framework.TestCase;
 
@@ -11,6 +14,7 @@ import javax.script.Bindings;
 import javax.script.CompiledScript;
 import javax.script.ScriptEngine;
 import javax.script.ScriptException;
+
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 
@@ -317,4 +321,54 @@ public class GremlinGroovyScriptEngineTest extends TestCase {
         ScriptEngine engine = new GremlinGroovyScriptEngine();
         assertEquals("轉注", engine.eval("'轉注'"));
     }
+    
+    public void testUTF8Query() throws Exception {
+		 TinkerGraph graph = new TinkerGraph();
+			Index<Vertex> index = graph.createIndex("nodes", Vertex.class);
+			
+			Vertex nonUtf8 = graph.addVertex("1");
+			nonUtf8.setProperty("name", "marko");
+			nonUtf8.setProperty("age", 29);
+			index.put("name", "marko", nonUtf8);
+			
+			
+			Vertex utf8Name = graph.addVertex("2");
+			utf8Name.setProperty("name", "轉注");
+			utf8Name.setProperty("age", 32);
+			index.put("name", "轉注", utf8Name);
+			graph.addVertex(utf8Name);
+			
+			graph.addEdge("12", nonUtf8, utf8Name, "created").setProperty("weight",
+					0.2f);
+
+			ScriptEngine engine = new GremlinGroovyScriptEngine();
+
+			engine.put("g", graph);
+			
+			
+			Object eval = engine.eval("g.idx(\"nodes\")[['name' : 'marko']]");
+			assertResult(eval, "marko");
+			eval = engine.eval("g.idx(\"nodes\")[['name' : '轉注']]");
+			assertResult(eval, "轉注");
+
+			
+			
+		}
+
+		private static void assertResult(Object eval, String expected) {
+			boolean found = false;
+			if (eval instanceof Pipe)
+		    {
+		      for (Object item : (Iterable) eval)
+		      {
+		        if(item instanceof Vertex){
+		        	Vertex v = (Vertex) item;
+		        	System.out.println( "Expected : " + expected + ", Actual : " + v.getProperty("name"));
+		        	System.out.println( "Success :" + expected.equals(v.getProperty("name")));
+		        	found = expected.equals(v.getProperty("name"));
+		        }
+		      }
+		    }
+			assertEquals("Expected vertex with name " + expected + " not found ", true, found);
+		}
 }
